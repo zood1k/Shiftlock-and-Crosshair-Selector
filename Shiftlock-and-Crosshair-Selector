@@ -396,3 +396,433 @@ for _, crosshairId in ipairs(ValidCrosshairs) do
 end
 
 ResetCursorButton.MouseButton1Click:Connect(function()
+    ResetCursor()
+end)
+
+local ToggleMenuButton = Instance.new("TextButton", CrosshairGui)
+ToggleMenuButton.Size = UDim2.new(0, 40, 0, 40)
+ToggleMenuButton.Position = UDim2.new(1, -50, 0, 10)
+ToggleMenuButton.Text = "🎯"
+ToggleMenuButton.Font = Enum.Font.Gotham
+ToggleMenuButton.TextSize = 20
+ToggleMenuButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+ToggleMenuButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleMenuButton.ZIndex = 999
+ToggleMenuButton.AutoButtonColor = true
+
+local isToggleDragging = false
+local toggleDragInput = nil
+local toggleDragStart = nil
+local toggleStartPosition = nil
+
+ToggleMenuButton.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Touch or input.UserInputType == Enum.UserInputType.MouseButton1 then
+        isToggleDragging = true
+        toggleDragStart = input.Position
+        toggleStartPosition = ToggleMenuButton.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                isToggleDragging = false
+            end
+        end)
+    end
+end)
+
+ToggleMenuButton.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        toggleDragInput = input
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if isToggleDragging and input == toggleDragInput then
+        local delta = input.Position - toggleDragStart
+        ToggleMenuButton.Position = UDim2.new(
+            toggleStartPosition.X.Scale,
+            toggleStartPosition.X.Offset + delta.X,
+            toggleStartPosition.Y.Scale,
+            toggleStartPosition.Y.Offset + delta.Y
+        )
+    end
+end)
+
+ToggleMenuButton.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end)
+
+local DefaultSettings = {
+    size = 50,
+    strokeColor = {r = 0, g = 133, b = 199},
+    activeColor = {r = 0, g = 170, b = 255},
+    thickness = 2,
+    glow = 0.35
+}
+
+local CurrentSettings = LoadSettings() or DefaultSettings
+
+local function CreateSlider(parent, xOffset, yOffset, width)
+    local sliderFrame = Instance.new("Frame", parent)
+    sliderFrame.Size = UDim2.new(0, width, 0, 12)
+    sliderFrame.Position = UDim2.new(0, xOffset, 0, yOffset)
+    sliderFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    sliderFrame.BorderSizePixel = 0
+    Instance.new("UICorner", sliderFrame)
+
+    local fillBar = Instance.new("Frame", sliderFrame)
+    fillBar.Size = UDim2.new(0, 1, 1, 0)
+    fillBar.BackgroundColor3 = Color3.fromRGB(0, 170, 255)
+    fillBar.BorderSizePixel = 0
+    Instance.new("UICorner", fillBar)
+
+    local knob = Instance.new("Frame", sliderFrame)
+    knob.Size = UDim2.new(0, 14, 0, 14)
+    knob.AnchorPoint = Vector2.new(0.5, 0.5)
+    knob.Position = UDim2.new(0, 6, 0, 6)
+    knob.BackgroundColor3 = Color3.fromRGB(220, 220, 220)
+    Instance.new("UICorner", knob)
+
+    local isDragging = false
+
+    local function UpdateSlider(positionX)
+        local frameX = sliderFrame.AbsolutePosition.X
+        local frameWidth = sliderFrame.AbsoluteSize.X
+        local percent = math.clamp((positionX - frameX) / frameWidth, 0, 1)
+        fillBar.Size = UDim2.new(percent, 0, 1, 0)
+        knob.Position = UDim2.new(0, math.clamp(percent * frameWidth, 7, frameWidth - 7), 0, 6)
+        return percent
+    end
+
+    knob.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = true
+        end
+    end)
+
+    knob.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDragging = false
+        end
+    end)
+
+    sliderFrame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            UpdateSlider(input.Position.X)
+            isDragging = true
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if isDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            UpdateSlider(input.Position.X)
+        end
+    end)
+
+    return {
+        set = function(value)
+            local percent = math.clamp(value, 0, 1)
+            local frameWidth = sliderFrame.AbsoluteSize.X
+            fillBar.Size = UDim2.new(percent, 0, 1, 0)
+            knob.Position = UDim2.new(0, math.clamp(percent * frameWidth, 7, frameWidth - 7), 0, 6)
+        end,
+        get = function()
+            return fillBar.Size.X.Scale
+        end,
+        raw = sliderFrame
+    }
+end
+
+local SettingsTitle = Instance.new("TextLabel", ShiftLockPanel)
+SettingsTitle.Size = UDim2.new(1, 0, 0, 20)
+SettingsTitle.Position = UDim2.new(0, 0, 0, 0)
+SettingsTitle.BackgroundTransparency = 1
+SettingsTitle.Font = Enum.Font.GothamBold
+SettingsTitle.TextSize = 14
+SettingsTitle.Text = "ShiftLock Settings"
+SettingsTitle.TextColor3 = Color3.fromRGB(240, 240, 240)
+SettingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+
+local SettingsDescription = Instance.new("TextLabel", ShiftLockPanel)
+SettingsDescription.Size = UDim2.new(1, 0, 0, 28)
+SettingsDescription.Position = UDim2.new(0, 0, 0, 28)
+SettingsDescription.BackgroundTransparency = 1
+SettingsDescription.Font = Enum.Font.Gotham
+SettingsDescription.TextSize = 12
+SettingsDescription.TextColor3 = Color3.fromRGB(200, 200, 200)
+SettingsDescription.Text = "Live preview updates the floating ShiftLock button."
+
+local SizeLabel = Instance.new("TextLabel", ShiftLockPanel)
+SizeLabel.Size = UDim2.new(0, 110, 0, 18)
+SizeLabel.Position = UDim2.new(0, 0, 0, 60)
+SizeLabel.BackgroundTransparency = 1
+SizeLabel.Font = Enum.Font.Gotham
+SizeLabel.TextSize = 12
+SizeLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+SizeLabel.Text = "Size (px)"
+
+local SizeSlider = CreateSlider(ShiftLockPanel, 110, 64, 140)
+
+local SizeValueLabel = Instance.new("TextLabel", ShiftLockPanel)
+SizeValueLabel.Size = UDim2.new(0, 40, 0, 18)
+SizeValueLabel.Position = UDim2.new(0, 255, 0, 60)
+SizeValueLabel.BackgroundTransparency = 1
+SizeValueLabel.Font = Enum.Font.Gotham
+SizeValueLabel.TextSize = 12
+SizeValueLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+
+local BorderColorLabel = Instance.new("TextLabel", ShiftLockPanel)
+BorderColorLabel.Size = UDim2.new(0, 140, 0, 18)
+BorderColorLabel.Position = UDim2.new(0, 0, 0, 96)
+BorderColorLabel.BackgroundTransparency = 1
+BorderColorLabel.Font = Enum.Font.Gotham
+BorderColorLabel.TextSize = 12
+BorderColorLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+BorderColorLabel.Text = "Border Color"
+
+local ColorOptions = {
+    {name = "Blue", color = Color3.fromRGB(0, 133, 199)},
+    {name = "Red", color = Color3.fromRGB(220, 60, 60)},
+    {name = "Green", color = Color3.fromRGB(60, 200, 120)},
+    {name = "White", color = Color3.fromRGB(255, 255, 255)},
+    {name = "Purple", color = Color3.fromRGB(160, 80, 255)},
+    {name = "Yellow", color = Color3.fromRGB(255, 200, 60)}
+}
+
+local ColorButtons = {}
+
+local function RGBTableToColor3(rgbTable)
+    return Color3.fromRGB(
+        math.clamp(rgbTable.r or 0, 0, 255),
+        math.clamp(rgbTable.g or 0, 0, 255),
+        math.clamp(rgbTable.b or 0, 0, 255)
+    )
+end
+
+for index, colorData in ipairs(ColorOptions) do
+    local colorButton = Instance.new("TextButton", ShiftLockPanel)
+    colorButton.Size = UDim2.new(0, 36, 0, 28)
+    colorButton.Position = UDim2.new(0, (index - 1) * 40, 0, 118)
+    colorButton.BackgroundColor3 = colorData.color
+    colorButton.BorderSizePixel = 0
+    colorButton.Text = ""
+    colorButton.AutoButtonColor = true
+    Instance.new("UICorner", colorButton).CornerRadius = UDim.new(0, 6)
+
+    colorButton.MouseButton1Click:Connect(function()
+        ButtonStroke.Color = colorData.color
+        CurrentSettings.strokeColor = {
+            r = colorData.color.R * 255,
+            g = colorData.color.G * 255,
+            b = colorData.color.B * 255
+        }
+        SaveSettings(CurrentSettings)
+    end)
+
+    ColorButtons[index] = colorButton
+end
+
+local GlowLabel = Instance.new("TextLabel", ShiftLockPanel)
+GlowLabel.Size = UDim2.new(0, 120, 0, 18)
+GlowLabel.Position = UDim2.new(0, 0, 0, 158)
+GlowLabel.BackgroundTransparency = 1
+GlowLabel.Font = Enum.Font.Gotham
+GlowLabel.TextSize = 12
+GlowLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+GlowLabel.Text = "Glow Intensity"
+
+local GlowSlider = CreateSlider(ShiftLockPanel, 110, 162, 140)
+
+local GlowValueLabel = Instance.new("TextLabel", ShiftLockPanel)
+GlowValueLabel.Size = UDim2.new(0, 40, 0, 18)
+GlowValueLabel.Position = UDim2.new(0, 255, 0, 158)
+GlowValueLabel.BackgroundTransparency = 1
+GlowValueLabel.Font = Enum.Font.Gotham
+GlowValueLabel.TextSize = 12
+GlowValueLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+
+local ThicknessLabel = Instance.new("TextLabel", ShiftLockPanel)
+ThicknessLabel.Size = UDim2.new(0, 110, 0, 18)
+ThicknessLabel.Position = UDim2.new(0, 0, 0, 188)
+ThicknessLabel.BackgroundTransparency = 1
+ThicknessLabel.Font = Enum.Font.Gotham
+ThicknessLabel.TextSize = 12
+ThicknessLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+ThicknessLabel.Text = "Stroke Thickness"
+
+local ThicknessMinusButton = Instance.new("TextButton", ShiftLockPanel)
+ThicknessMinusButton.Size = UDim2.new(0, 26, 0, 22)
+ThicknessMinusButton.Position = UDim2.new(0, 120, 0, 186)
+ThicknessMinusButton.Text = "-"
+ThicknessMinusButton.Font = Enum.Font.GothamBold
+ThicknessMinusButton.TextSize = 18
+ThicknessMinusButton.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+ThicknessMinusButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ThicknessMinusButton.AutoButtonColor = true
+
+local ThicknessPlusButton = ThicknessMinusButton:Clone()
+ThicknessPlusButton.Parent = ShiftLockPanel
+ThicknessPlusButton.Position = UDim2.new(0, 152, 0, 186)
+ThicknessPlusButton.Text = "+"
+ThicknessPlusButton.Name = "plus"
+
+local ThicknessValueLabel = Instance.new("TextLabel", ShiftLockPanel)
+ThicknessValueLabel.Size = UDim2.new(0, 36, 0, 18)
+ThicknessValueLabel.Position = UDim2.new(0, 184, 0, 188)
+ThicknessValueLabel.BackgroundTransparency = 1
+ThicknessValueLabel.Font = Enum.Font.Gotham
+ThicknessValueLabel.TextSize = 12
+ThicknessValueLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+
+local ResetSettingsButton = Instance.new("TextButton", ShiftLockPanel)
+ResetSettingsButton.Size = UDim2.new(0, 80, 0, 26)
+ResetSettingsButton.Position = UDim2.new(1, -90, 1, -36)
+ResetSettingsButton.Text = "Reset"
+ResetSettingsButton.Font = Enum.Font.GothamBold
+ResetSettingsButton.TextSize = 14
+ResetSettingsButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+ResetSettingsButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ResetSettingsButton.AutoButtonColor = true
+Instance.new("UICorner", ResetSettingsButton)
+
+local function SwitchTab(tabName)
+    if tabName == "cross" then
+        CrosshairsPanel.Visible = true
+        ShiftLockPanel.Visible = false
+        CrosshairsTabButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        ShiftLockTabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    else
+        CrosshairsPanel.Visible = false
+        ShiftLockPanel.Visible = true
+        CrosshairsTabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+        ShiftLockTabButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    end
+end
+
+CrosshairsTabButton.MouseButton1Click:Connect(function()
+    SwitchTab("cross")
+end)
+
+ShiftLockTabButton.MouseButton1Click:Connect(function()
+    SwitchTab("shift")
+end)
+
+SwitchTab("cross")
+
+local glowConnection = nil
+
+local function ApplySettings()
+    local size = math.clamp(tonumber(CurrentSettings.size) or DefaultSettings.size, 40, 100)
+    LockButton.Size = UDim2.new(0, size, 0, size)
+
+    local strokeColor = CurrentSettings.strokeColor or DefaultSettings.strokeColor
+    ButtonStroke.Color = Color3.fromRGB(
+        math.clamp(strokeColor.r, 0, 255),
+        math.clamp(strokeColor.g, 0, 255),
+        math.clamp(strokeColor.b, 0, 255)
+    )
+    ButtonStroke.Thickness = tonumber(CurrentSettings.thickness) or DefaultSettings.thickness
+
+    if isShiftLockEnabled then
+        local activeColor = CurrentSettings.activeColor or DefaultSettings.activeColor
+        ButtonIcon.ImageColor3 = Color3.fromRGB(
+            math.clamp(activeColor.r, 0, 255),
+            math.clamp(activeColor.g, 0, 255),
+            math.clamp(activeColor.b, 0, 255)
+        )
+    end
+
+    if glowConnection then
+        glowConnection:Disconnect()
+        glowConnection = nil
+    end
+
+    local glowIntensity = math.clamp(tonumber(CurrentSettings.glow) or DefaultSettings.glow, 0, 1)
+
+    if isShiftLockEnabled and glowIntensity > 0 then
+        local baseTransparency = 0.3
+        local glowRange = glowIntensity * 0.45
+
+        glowConnection = RunService.Heartbeat:Connect(function()
+            local currentTime = tick()
+            local transparency = baseTransparency + math.sin(currentTime * 2.5) * glowRange
+            ButtonStroke.Transparency = math.clamp(transparency, 0, 1)
+        end)
+    else
+        ButtonStroke.Transparency = 0.3
+    end
+end
+
+SizeSlider.set(CurrentSettings.size and (CurrentSettings.size - 40) / 60 or (DefaultSettings.size - 40) / 60)
+SizeValueLabel.Text = tostring(CurrentSettings.size or DefaultSettings.size)
+GlowSlider.set(CurrentSettings.glow or DefaultSettings.glow)
+GlowValueLabel.Text = tostring(math.floor((CurrentSettings.glow or DefaultSettings.glow) * 100))
+ThicknessValueLabel.Text = tostring(CurrentSettings.thickness or DefaultSettings.thickness)
+
+for index, colorData in ipairs(ColorOptions) do
+    ColorButtons[index].MouseButton1Click:Connect(function()
+        CurrentSettings.strokeColor = {
+            r = colorData.color.R * 255,
+            g = colorData.color.G * 255,
+            b = colorData.color.B * 255
+        }
+        SaveSettings(CurrentSettings)
+        ApplySettings()
+    end)
+end
+
+local lastUpdateTime = 0
+
+RunService.RenderStepped:Connect(function()
+    local currentTime = tick()
+    if currentTime - lastUpdateTime >= 0.05 then
+        lastUpdateTime = currentTime
+
+        local sizePercent = SizeSlider.get()
+        local sizeValue = math.floor(40 + sizePercent * 60 + 0.5)
+        CurrentSettings.size = sizeValue
+        SizeValueLabel.Text = tostring(sizeValue)
+
+        CurrentSettings.glow = GlowSlider.get()
+        GlowValueLabel.Text = tostring(math.floor(CurrentSettings.glow * 100))
+
+        CurrentSettings.thickness = tonumber(ThicknessValueLabel.Text) or DefaultSettings.thickness
+
+        SaveSettings(CurrentSettings)
+        ApplySettings()
+    end
+end)
+
+ThicknessMinusButton.MouseButton1Click:Connect(function()
+    local currentThickness = tonumber(ThicknessValueLabel.Text) or DefaultSettings.thickness
+    local newThickness = math.max(0, currentThickness - 1)
+    ThicknessValueLabel.Text = tostring(newThickness)
+end)
+
+ThicknessPlusButton.MouseButton1Click:Connect(function()
+    local currentThickness = tonumber(ThicknessValueLabel.Text) or DefaultSettings.thickness
+    local newThickness = math.min(10, currentThickness + 1)
+    ThicknessValueLabel.Text = tostring(newThickness)
+end)
+
+ResetSettingsButton.MouseButton1Click:Connect(function()
+    CurrentSettings = table.clone(DefaultSettings)
+    SizeSlider.set((DefaultSettings.size - 40) / 60)
+    SizeValueLabel.Text = tostring(DefaultSettings.size)
+    GlowSlider.set(DefaultSettings.glow)
+    GlowValueLabel.Text = tostring(math.floor(DefaultSettings.glow * 100))
+    ThicknessValueLabel.Text = tostring(DefaultSettings.thickness)
+    ButtonStroke.Color = RGBTableToColor3(DefaultSettings.strokeColor)
+    SaveSettings(CurrentSettings)
+    ApplySettings()
+end)
+
+CurrentSettings.strokeColor = CurrentSettings.strokeColor or DefaultSettings.strokeColor
+CurrentSettings.activeColor = CurrentSettings.activeColor or DefaultSettings.activeColor
+CurrentSettings.size = CurrentSettings.size or DefaultSettings.size
+CurrentSettings.thickness = CurrentSettings.thickness or DefaultSettings.thickness
+CurrentSettings.glow = CurrentSettings.glow or DefaultSettings.glow
+
+ApplySettings()
+
+if isShiftLockEnabled then
+    ApplySettings()
+end
